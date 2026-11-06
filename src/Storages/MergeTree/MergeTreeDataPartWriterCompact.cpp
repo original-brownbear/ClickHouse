@@ -473,7 +473,7 @@ void MergeTreeDataPartWriterCompact::fillDataChecksums(MergeTreeDataPartChecksum
 void MergeTreeDataPartWriterCompact::finishDataSerialization(bool sync)
 {
     if (sync)
-        parallelSyncFiles({plain_file.get(), marks_file.get()});
+        parallelSyncFiles<WriteBufferFromFileBase>({plain_file.get(), marks_file.get()});
 
     plain_file->finalize();
     marks_file->finalize();
