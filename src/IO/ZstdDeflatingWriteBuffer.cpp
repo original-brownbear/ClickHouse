@@ -96,7 +96,7 @@ void ZstdDeflatingWriteBuffer::flush(ZSTD_EndDirective mode)
 void ZstdDeflatingWriteBuffer::nextImpl()
 {
     if (offset())
-        flush(ZSTD_e_flush);
+        flush(ZSTD_e_continue);
 }
 
 void ZstdDeflatingWriteBuffer::finalFlushBefore()
