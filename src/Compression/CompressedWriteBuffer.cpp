@@ -144,13 +144,13 @@ size_t CompressedWriteBuffer::writeSlowLarge(const char * from, size_t n)
         compressed_ptr = compressed_buffer.data();
     }
 
-    UInt32 compressed_size = codec->compress(working_buffer.begin(), decompressed_size, compressed_ptr, codec_state.get());
+    UInt32 compressed_size = codec->compress(working_buffer.begin(), static_cast<UInt32>(offset()), compressed_ptr, codec_state.get());
     compressed_size += codec->compress(from, static_cast<UInt32>(n), compressed_ptr + compressed_size, codec_state.get());
 
     /// The block is stored as is if compression saves less than 1/8 of its size.
     if (uncompressed_codec && static_cast<UInt64>(compressed_size) * 8 > static_cast<UInt64>(decompressed_size) * 7)
     {
-        compressed_size = uncompressed_codec->compress(working_buffer.begin(), decompressed_size, compressed_ptr);
+        compressed_size = uncompressed_codec->compress(working_buffer.begin(), static_cast<UInt32>(offset()), compressed_ptr);
         compressed_size += uncompressed_codec->compress(from, static_cast<UInt32>(n), compressed_ptr + compressed_size, codec_state.get());
     }
 
