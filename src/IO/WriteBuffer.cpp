@@ -53,7 +53,7 @@ void WriteBuffer::writeSlow(const char * from, size_t n)
     if (canceled)
         throwWriteToCanceledBuffer(ErrorCodes::CANNOT_WRITE_AFTER_BUFFER_CANCELED);
 
-    size_t bytes_copied = 0;
+    size_t bytes_copied = writeSlowLarge(from, n);
 
     /// Produces endless loop
     chassert(!working_buffer.empty());

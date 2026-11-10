@@ -60,6 +60,9 @@ private:
     /// cancel call cancels the out buffer.
     void cancelImpl() noexcept override;
 
+
+    size_t writeSlowLarge(const char * from, size_t n) override;
+
     WriteBuffer & out;
     CompressionCodecPtr codec;
     CompressionStatePtr codec_state;

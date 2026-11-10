@@ -194,6 +194,11 @@ private:
     void writeSlow(const char * from, size_t n);
     void writeSlow(char x);
 
+    virtual size_t writeSlowLarge(const char *, size_t)
+    {
+        return 0;
+    }
+
     /// A size known at compile time becomes plain moves. A run-time size is copied with `memcpy`, which keeps
     /// the inlined code small: a larger fast path changes how its callers are optimized (inlining, loop unswitching).
     /// Zero bytes, which is common for empty strings and empty delimiters, does not call `memcpy` at all.
