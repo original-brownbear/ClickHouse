@@ -185,6 +185,45 @@ struct SingleValueDataFixed
     static void compileMax(llvm::IRBuilderBase & builder, llvm::Value * aggregate_data_ptr, llvm::Value * value_to_check);
     static void compileMaxMerge(llvm::IRBuilderBase & builder, llvm::Value * aggregate_data_dst_ptr, llvm::Value * aggregate_data_src_ptr);
 #endif
+
+private:
+    template <bool is_smaller>
+    [[nodiscard]] bool isExtremal(const T & to) const
+    {
+        if (!has_value)
+            return true;
+        if constexpr (is_smaller)
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                /// IEEE 754: !(value >= to) is true when to > value OR value is NaN.
+                return !isNaN(to) && !(value <= to);
+            }
+            return to < value;
+        }
+        else
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                /// IEEE 754: !(value >= to) is true when to > value OR value is NaN.
+                return !isNaN(to) && !(value >= to);
+            }
+            return to > value;
+        }
+    }
+
+    template <bool is_smaller>
+    bool setIfExtremal(const T & to)
+    {
+        if (isExtremal<is_smaller>(to))
+        {
+            has_value = true;
+            value = to;
+            return true;
+        }
+        return false;
+    }
+
 };
 
 #define DISPATCH(TYPE) \

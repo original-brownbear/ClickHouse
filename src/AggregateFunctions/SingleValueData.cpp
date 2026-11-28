@@ -15,7 +15,6 @@
 #    include <base/extended_types.h>
 #endif
 
-#include <cstring>
 #include <type_traits>
 
 
@@ -44,88 +43,81 @@ mergeIfAndNullFlags(const UInt8 * __restrict null_map, const UInt8 * __restrict 
 
 }
 
-std::optional<size_t> SingleValueDataBase::getSmallestIndex(const IColumn & column, size_t row_begin, size_t row_end) const
+template <bool smallest>
+bool static is_extremal(const int compare_result)
 {
-    static constexpr int nan_null_direction_hint = 1;
+    if constexpr (smallest)
+    {
+        return compare_result < 0;
+    }
+    return compare_result > 0;
+}
 
+template <bool smallest>
+std::optional<size_t> static getExtremalIndex(const IColumn & column, const size_t row_begin, const size_t row_end)
+{
     if (row_begin >= row_end)
         return std::nullopt;
 
+    constexpr int nan_null_direction_hint = smallest ? 1 : -1;
     /// TODO: Introduce row_begin and row_end to getPermutation
     if (row_begin != 0 || row_end != column.size())
     {
         size_t index = row_begin;
         for (size_t i = index + 1; i < row_end; i++)
-            if ((column.compareAt(i, index, column, nan_null_direction_hint) < 0))
+        {
+            if (is_extremal<smallest>(column.compareAt(i, index, column, nan_null_direction_hint)))
                 index = i;
+        }
         return {index};
     }
 
-    constexpr IColumn::PermutationSortDirection direction = IColumn::PermutationSortDirection::Ascending;
-    constexpr IColumn::PermutationSortStability stability = IColumn::PermutationSortStability::Unstable;
+    constexpr auto direction = smallest ? IColumn::PermutationSortDirection::Ascending : IColumn::PermutationSortDirection::Descending;
+    constexpr auto stability = IColumn::PermutationSortStability::Unstable;
     IColumn::Permutation permutation;
     constexpr UInt64 limit = 1;
     column.getPermutation(direction, stability, limit, nan_null_direction_hint, permutation);
     return {permutation[0]};
 }
 
+std::optional<size_t> SingleValueDataBase::getSmallestIndex(const IColumn & column, size_t row_begin, size_t row_end) const
+{
+    return getExtremalIndex<true>(column, row_begin, row_end);
+}
+
 std::optional<size_t> SingleValueDataBase::getGreatestIndex(const IColumn & column, size_t row_begin, size_t row_end) const
 {
-    static constexpr int nan_null_direction_hint = -1;
+    return getExtremalIndex<false>(column, row_begin, row_end);
+}
 
-    if (row_begin >= row_end)
+template <bool smallest>
+std::optional<size_t> static getExtremalIndexNotNullIf(
+    const IColumn & column, const UInt8 * __restrict null_map, const UInt8 * __restrict if_map, size_t row_begin, size_t row_end)
+{
+    constexpr int nan_null_direction_hint = smallest ? 1 : -1;
+
+    size_t index = row_begin;
+    while (index < row_end && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
+        index++;
+    if (index == row_end)
         return std::nullopt;
 
-    /// TODO: Introduce row_begin and row_end to getPermutation
-    if (row_begin != 0 || row_end != column.size())
-    {
-        size_t index = row_begin;
-        for (size_t i = index + 1; i < row_end; i++)
-            if ((column.compareAt(i, index, column, nan_null_direction_hint) > 0))
-                index = i;
-        return {index};
-    }
-
-    constexpr IColumn::PermutationSortDirection direction = IColumn::PermutationSortDirection::Descending;
-    constexpr IColumn::PermutationSortStability stability = IColumn::PermutationSortStability::Unstable;
-    IColumn::Permutation permutation;
-    constexpr UInt64 limit = 1;
-    column.getPermutation(direction, stability, limit, nan_null_direction_hint, permutation);
-    return {permutation[0]};
+    for (size_t i = index + 1; i < row_end; i++)
+        if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && is_extremal<smallest>(column.compareAt(i, index, column, nan_null_direction_hint)))
+            index = i;
+    return {index};
 }
 
 std::optional<size_t> SingleValueDataBase::getSmallestIndexNotNullIf(
     const IColumn & column, const UInt8 * __restrict null_map, const UInt8 * __restrict if_map, size_t row_begin, size_t row_end) const
 {
-    static constexpr int nan_null_direction_hint = 1;
-
-    size_t index = row_begin;
-    while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
-        index++;
-    if (index == row_end)
-        return std::nullopt;
-
-    for (size_t i = index + 1; i < row_end; i++)
-        if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (column.compareAt(i, index, column, nan_null_direction_hint) < 0))
-            index = i;
-    return {index};
+    return getExtremalIndexNotNullIf<true>(column, null_map, if_map, row_begin, row_end);
 }
 
 std::optional<size_t> SingleValueDataBase::getGreatestIndexNotNullIf(
     const IColumn & column, const UInt8 * __restrict null_map, const UInt8 * __restrict if_map, size_t row_begin, size_t row_end) const
 {
-    static constexpr int nan_null_direction_hint = -1;
-
-    size_t index = row_begin;
-    while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
-        index++;
-    if (index == row_end)
-        return std::nullopt;
-
-    for (size_t i = index + 1; i < row_end; i++)
-        if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (column.compareAt(i, index, column, nan_null_direction_hint) > 0))
-            index = i;
-    return {index};
+    return getExtremalIndexNotNullIf<false>(column, null_map, if_map, row_begin, row_end);
 }
 
 void SingleValueDataBase::setSmallest(const IColumn & column, size_t row_begin, size_t row_end, Arena * arena)
@@ -216,72 +208,25 @@ void SingleValueDataFixed<T>::set(const SingleValueDataFixed<T> & to, Arena *)
 template <typename T>
 bool SingleValueDataFixed<T>::setIfSmaller(const T & to)
 {
-    if constexpr (is_floating_point<T>)
-    {
-        /// IEEE 754: !(value <= to) is true when to < value OR value is NaN.
-        /// Combined with !isNaN(to) this correctly:
-        ///  - rejects NaN input (except as the very first value via !has_value)
-        ///  - accepts any non-NaN that replaces a NaN accumulator
-        ///  - does the normal less-than comparison otherwise
-        if (!has_value || (!isNaN(to) && !(value <= to)))
-        {
-            has_value = true;
-            value = to;
-            return true;
-        }
-        return false;
-    }
-
-    if (!has_value || to < value)
-    {
-        has_value = true;
-        value = to;
-        return true;
-    }
-    return false;
+    return setIfExtremal<true>(to);
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfGreater(const T & to)
 {
-    if constexpr (is_floating_point<T>)
-    {
-        /// IEEE 754: !(value >= to) is true when to > value OR value is NaN.
-        if (!has_value || (!isNaN(to) && !(value >= to)))
-        {
-            has_value = true;
-            value = to;
-            return true;
-        }
-        return false;
-    }
-
-    if (!has_value || to > value)
-    {
-        has_value = true;
-        value = to;
-        return true;
-    }
-    return false;
+    return setIfExtremal<false>(to);
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::wouldSetIfSmaller(const SingleValueDataFixed<T> & to) const
 {
-    /// Same IEEE 754 trick as setIfSmaller(const T &) — see comment there.
-    if constexpr (is_floating_point<T>)
-        return to.has() && (!has() || (!isNaN(to.value) && !(value <= to.value)));
-    else
-        return to.has() && (!has() || to.value < value);
+    return to.has() && isExtremal<true>(to.value);
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::wouldSetIfGreater(const SingleValueDataFixed<T> & to) const
 {
-    if constexpr (is_floating_point<T>)
-        return to.has() && (!has() || (!isNaN(to.value) && !(value >= to.value)));
-    else
-        return to.has() && (!has() || to.value > value);
+    return to.has() && isExtremal<false>(to.value);
 }
 
 template <typename T>
@@ -307,47 +252,26 @@ bool SingleValueDataFixed<T>::setIfGreater(const SingleValueDataFixed<T> & to, A
 }
 
 template <typename T>
-bool SingleValueDataFixed<T>::setIfSmaller(const IColumn & column, size_t row_num, Arena * arena)
+bool SingleValueDataFixed<T>::setIfSmaller(const IColumn & column, size_t row_num, Arena *)
 {
-    if constexpr (is_floating_point<T>)
+    T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
+    if (isExtremal<true>(candidate))
     {
-        /// Same IEEE 754 trick as setIfSmaller(const T &) — see comment there.
-        T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
-        if (!has_value || (!isNaN(candidate) && !(value <= candidate)))
-        {
-            has_value = true;
-            value = candidate;
-            return true;
-        }
-        return false;
-    }
-
-    if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] < value)
-    {
-        set(column, row_num, arena);
+        has_value = true;
+        value = candidate;
         return true;
     }
     return false;
 }
 
 template <typename T>
-bool SingleValueDataFixed<T>::setIfGreater(const IColumn & column, size_t row_num, Arena * arena)
+bool SingleValueDataFixed<T>::setIfGreater(const IColumn & column, size_t row_num, Arena *)
 {
-    if constexpr (is_floating_point<T>)
+    T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
+    if (isExtremal<false>(candidate))
     {
-        T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
-        if (!has_value || (!isNaN(candidate) && !(value >= candidate)))
-        {
-            has_value = true;
-            value = candidate;
-            return true;
-        }
-        return false;
-    }
-
-    if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] > value)
-    {
-        set(column, row_num, arena);
+        has_value = true;
+        value = candidate;
         return true;
     }
     return false;

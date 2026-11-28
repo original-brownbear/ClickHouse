@@ -1,13 +1,12 @@
 #pragma once
 
-#include <cmath>
 #include <limits>
 #include <type_traits>
 #include <base/DecomposedFloat.h>
 
 
 template <typename T>
-inline bool isNaN(T x)
+constexpr bool isNaN(T x)
 {
     /// To be sure, that this function is zero-cost for non-floating point types.
     if constexpr (is_floating_point<T>)
@@ -17,7 +16,7 @@ inline bool isNaN(T x)
 }
 
 template <typename T>
-inline bool isFinite(T x)
+constexpr bool isFinite(T x)
 {
     if constexpr (is_floating_point<T>)
         return DecomposedFloat<T>(x).isFinite();
